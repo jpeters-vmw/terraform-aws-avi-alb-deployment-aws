@@ -1,4 +1,4 @@
-# Copyright 2022 VMware, Inc.
+# Copyright 2023 VMware, Inc.
 # SPDX-License-Identifier: Apache-2.0
 ---
 - name: Avi Controller Configuration
@@ -77,31 +77,7 @@
     register_controller:
       enabled: ${register_controller.enabled}
 %{ endif ~}
-%{ if aws_partition == "aws-us-gov" ~}
-    motd: >
-      Attention!!
 
-      The use of this system is restricted to authorized users only. Unauthorized
-      access, use, or modification of this computer system or of the data contained
-      herein or in transit to/from this system constitutes a violation of Title 18,
-      United States Code, Section 1030 and state criminal and civil laws. 
-      
-
-      These systems and equipment are subject to monitoring to ensure proper performance
-      of applicable system and security features. Such monitoring may result in the
-      acquisition, recording and analysis of all data being communicated, transmitted,
-      processed, or stored in this system by a user, including personal information.
-
-
-      Evidence of unauthorized use collected during monitoring may be used for
-      administrative, criminal, or other adverse action. Unauthorized use may subject
-      you to criminal prosecution. Use of this computer system, authorized or
-      unauthorized, constitutes consent to monitoring of this system. 
-
-      
-      By accessing this information system, the user acknowledges and accepts the
-      aforementioned terms and conditions.
-%{ endif ~}
   tasks:
     - name: Wait for Controller to become ready
       uri:
@@ -112,42 +88,6 @@
       until: result.status == 200
       retries: 300
       delay: 10
-         
-    - name: Configure System Configurations
-      avi_systemconfiguration:
-        avi_credentials: "{{ avi_credentials }}"
-        state: present
-        default_license_tier: "{{ license_tier }}"
-        email_configuration: "{{ email_config }}"
-        global_tenant_config:
-          se_in_provider_context: true
-          tenant_access_to_provider_se: true
-          tenant_vrf: false
-%{ if dns_servers != null ~}
-        dns_configuration:
-          server_list: "{{ dns_servers }}"
-          search_domain: "{{ dns_search_domain }}"
-%{ endif ~}
-        ntp_configuration:
-          ntp_servers: "{{ ntp_servers }}"        
-        portal_configuration:
-          allow_basic_authentication: false
-          disable_remote_cli_shell: false
-          enable_clickjacking_protection: true
-          enable_http: true
-          enable_https: true
-          password_strength_check: true
-          redirect_to_https: true
-          use_uuid_from_input: false
-%{ if aws_partition == "aws-us-gov" ~}
-        linux_configuration:
-          banner: "{{ motd }}"
-%{ endif ~}
-        welcome_workflow_complete: true
-      until: sysconfig is not failed
-      retries: 30
-      delay: 5
-      register: sysconfig
 
     - name: Apply Avi License for ENTERPRISE Tier
       avi_api_session:

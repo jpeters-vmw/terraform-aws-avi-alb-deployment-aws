@@ -57,6 +57,15 @@ variable "aws_secret_key" {
   sensitive   = false
   default     = ""
 }
+variable "fips" {
+  description = "Enable FIPS mode on AWS.  Specify the S3 bucket and prefix of the controller package accessible by the controller."
+  type = object({
+    enabled               = bool,
+    s3_bucket             = string,
+    s3_controller_package = string
+  })
+  default = { enabled = "false", s3_bucket = "", s3_controller_package = "/controller.pkg" }
+}
 variable "key_pair_name" {
   description = "The name of the existing EC2 Key pair that will be used to authenticate to the Avi Controller"
   type        = string

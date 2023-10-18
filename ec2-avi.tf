@@ -11,6 +11,7 @@ locals {
     aws_partition             = data.aws_partition.current.partition
     aws_region                = var.region
     avi_version               = var.avi_version
+    fips                      = var.fips
     dns_servers               = var.dns_servers
     dns_search_domain         = var.dns_search_domain
     ntp_servers               = var.ntp_servers
@@ -85,7 +86,8 @@ resource "aws_instance" "avi_controller" {
     Name = (var.custom_controller_name != null) ? "${var.custom_controller_name}-${count.index + 1}" : "${var.name_prefix}-avi-controller-${count.index + 1}"
   }
   metadata_options {
-    http_tokens = var.avi_version == "22.1.3" ? "required" : "optional"
+    # Only supported with AVI versions 22.1.3 and newer
+    http_tokens = can(regex("^(?:2[3-9]|[3-9]\\d|\\d{3,})\\.\\d+\\.\\d+$", var.avi_version)) ? "required" : "optional"
   }
   lifecycle {
     ignore_changes = [tags, associate_public_ip_address, root_block_device[0].tags]
@@ -138,7 +140,8 @@ resource "null_resource" "changepassword_provisioner" {
   }
 
 }
-resource "null_resource" "ansible_provisioner" {
+
+resource "null_resource" "system_configuration" {
   # Changes to any instance of the cluster requires re-provisioning
   triggers = {
     controller_instance_ids = join(",", aws_instance.avi_controller[*].id)
@@ -157,13 +160,63 @@ resource "null_resource" "ansible_provisioner" {
     timeout     = "600s"
     private_key = local.private_key
   }
-  provisioner "file" {
-    source      = "${path.module}/files/ansible/avi_pulse_registration.py"
-    destination = "/home/admin/ansible/avi_pulse_registration.py"
-  }
+
   provisioner "file" {
     source      = "${path.module}/files/ansible/views_albservices.patch"
     destination = "/home/admin/ansible/views_albservices.patch"
+  }
+
+  provisioner "file" {
+    content = templatefile("${path.module}/files/ansible/avi-system-configuration.yml.tpl",
+    local.cloud_settings)
+    destination = "/home/admin/ansible/avi-system-configuration.yml"
+  }
+
+  provisioner "remote-exec" {
+    inline = var.configure_controller ? var.create_iam ? [
+      "sleep 30",
+      "export ANSIBLE_COLLECTIONS_PATHS=/etc/ansible/collections:/home/admin/.ansible/collections:/usr/share/ansible/collections",
+      "cd ansible",
+      "ansible-playbook avi-system-configuration.yml -e password=${var.controller_password} 2> ansible-error.log | tee ansible-sysconfig.log",
+      "echo System Configuration Completed"
+      ] : [
+      "sleep 30",
+      "export ANSIBLE_COLLECTIONS_PATHS=/etc/ansible/collections:/home/admin/.ansible/collections:/usr/share/ansible/collections",
+      "cd ansible",
+      "ansible-playbook avi-system-configuration.yml -e password=${var.controller_password} -e aws_access_key_id=${var.aws_access_key} -e aws_secret_access_key=${var.aws_secret_key} 2> ansible-error.log | tee ansible-sysconfig.log",
+      "echo System Configuration Completed"
+      ] : [
+      "sleep 30",
+      "export ANSIBLE_COLLECTIONS_PATHS=/etc/ansible/collections:/home/admin/.ansible/collections:/usr/share/ansible/collections",
+      "cd ansible",
+      "ansible-playbook avi-system-configuration.yml -e password=${var.controller_password} --tags register_controller 2> ansible-error.log | tee ansible-sysconfig.log",
+      "echo System Configuration Completed"
+    ]
+  }
+}
+
+resource "null_resource" "ansible_provisioner" {
+  # Changes to any instance of the cluster requires re-provisioning
+  triggers = {
+    controller_instance_ids = join(",", aws_instance.avi_controller[*].id)
+  }
+  depends_on = [null_resource.system_configuration]
+  lifecycle {
+    precondition {
+      condition     = local.private_key != null
+      error_message = "Must provide a value for either private_key_path or private_key_contents."
+    }
+  }
+  connection {
+    type        = "ssh"
+    host        = var.controller_public_address ? aws_eip.avi[0].public_ip : aws_instance.avi_controller[0].private_ip
+    user        = "admin"
+    timeout     = "600s"
+    private_key = local.private_key
+  }
+  provisioner "file" {
+    source      = "${path.module}/files/ansible/avi_pulse_registration.py"
+    destination = "/home/admin/ansible/avi_pulse_registration.py"
   }
   provisioner "file" {
     content = templatefile("${path.module}/files/ansible/avi-controller-aws-all-in-one-play.yml.tpl",
@@ -199,7 +252,7 @@ resource "null_resource" "ansible_provisioner" {
       "echo Controller Configuration Completed"
       ] : [
       "sleep 30",
-      "export ANSIBLE_COLLECTIONS_PATHS=/etc/ansible/collections:/home/admin/.ansible/collections:/usr/share/ansible/collections",
+      "",
       "cd ansible",
       "ansible-playbook avi-controller-aws-all-in-one-play.yml -e password=${var.controller_password} -e aws_access_key_id=${var.aws_access_key} -e aws_secret_access_key=${var.aws_secret_key} 2> ansible-error.log | tee ansible-playbook.log",
       "echo Controller Configuration Completed"

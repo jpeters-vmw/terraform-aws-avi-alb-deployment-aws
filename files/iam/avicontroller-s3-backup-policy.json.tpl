@@ -7,7 +7,8 @@
             "Action": [
                 "s3:PutObject",
                 "s3:ListBucket",
-                "s3:DeleteObject"
+                "s3:DeleteObject",
+                "s3:GetObject"
             ],
             "Resource": [
                 "arn:${awsPartition}:s3:::${s3_bucket}",
