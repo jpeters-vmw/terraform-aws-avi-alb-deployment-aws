@@ -153,6 +153,7 @@ resource "null_resource" "system_configuration" {
       error_message = "Must provide a value for either private_key_path or private_key_contents."
     }
   }
+
   connection {
     type        = "ssh"
     host        = var.controller_public_address ? aws_eip.avi[0].public_ip : aws_instance.avi_controller[0].private_ip
@@ -173,6 +174,7 @@ resource "null_resource" "system_configuration" {
   }
 
   provisioner "remote-exec" {
+    on_failure = "continue"
     inline = var.configure_controller ? var.create_iam ? [
       "sleep 30",
       "export ANSIBLE_COLLECTIONS_PATHS=/etc/ansible/collections:/home/admin/.ansible/collections:/usr/share/ansible/collections",
@@ -211,7 +213,7 @@ resource "null_resource" "ansible_provisioner" {
     type        = "ssh"
     host        = var.controller_public_address ? aws_eip.avi[0].public_ip : aws_instance.avi_controller[0].private_ip
     user        = "admin"
-    timeout     = "600s"
+    timeout     = "1800s"
     private_key = local.private_key
   }
   provisioner "file" {
