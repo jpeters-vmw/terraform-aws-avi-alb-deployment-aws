@@ -12,24 +12,25 @@
         username: "{{ username }}"
         password: "{{ password }}"
         api_version: "{{ api_version }}"
-    controller_ip:
-      ${ indent(6, yamlencode(controller_ip))}
     username: "admin"
     password: "{{ password }}"
     api_version: ${avi_version}
     aws_region: ${aws_region}
     aws_partition: ${aws_partition}
     name_prefix: ${name_prefix}
+    controller_ip:
+      ${ indent(6, yamlencode(controller_ip))}
+    controller_ha: ${controller_ha}
+    configure_gslb:
+      ${ indent(6, yamlencode(configure_gslb))}
+    controller_names:
+      ${ indent(6, yamlencode(controller_names))}
     ca_certificates:
       ${ indent(6, yamlencode(ca_certificates))}
     portal_certificate:
       ${ indent(6, yamlencode(portal_certificate))}
     securechannel_certificate:
       ${ indent(6, yamlencode(securechannel_certificate))}
-    controller_ip:
-      ${ indent(6, yamlencode(controller_ip))}
-    controller_names:
-      ${ indent(6, yamlencode(controller_names))}
     fips:
       ${ indent(6, yamlencode(fips))}
     license_tier: ${license_tier}
@@ -85,6 +86,70 @@
       until: result.status == 200
       retries: 300
       delay: 10
+
+    - name: Controller Cluster Configuration
+      avi_cluster:
+        avi_credentials: "{{ avi_credentials }}"
+        state: present
+        #virtual_ip:
+        #  type: V4
+        #  addr: "{{ controller_cluster_vip }}"
+        nodes:
+            - name:  "{{ controller_names[0] }}"
+              password: "{{ password }}"
+              ip:
+                type: V4
+                addr: "{{ controller_ip[0] }}"
+            - name:  "{{ controller_names[1] }}"
+              password: "{{ password }}"
+              ip:
+                type: V4
+                addr: "{{ controller_ip[1] }}"
+            - name:  "{{ controller_names[2] }}"
+              password: "{{ password }}"
+              ip:
+                type: V4
+                addr: "{{ controller_ip[2] }}"
+%{ if configure_gslb.enabled ~}
+        name: "{{ name_prefix }}-{{ configure_gslb.site_name }}-cluster"
+%{ else ~}
+        name: "{{ name_prefix }}-cluster"
+%{ endif ~}
+        tenant_uuid: "admin"
+      until: cluster_config is not failed
+      retries: 10
+      delay: 5
+      register: cluster_config
+      when: controller_ha == true
+      tags: controller_ha
+
+    - name: Verify Cluster State
+      block:
+        - name: Pause for 7 minutes for Cluster to form
+          ansible.builtin.pause:
+            minutes: 7
+
+        - name: Wait for Avi Cluster to be ready
+          avi_api_session:
+            avi_credentials: "{{ avi_credentials }}"
+            http_method: get
+            path: "cluster/runtime"
+          until: cluster_check is not failed
+          retries: 60
+          delay: 10
+          register: cluster_check
+
+        - name: Wait for Avi Cluster to be ready
+          avi_api_session:
+            avi_credentials: "{{ avi_credentials }}"
+            http_method: get
+            path: "cluster/runtime"
+          until: cluster_runtime.obj.cluster_state.state == "CLUSTER_UP_HA_ACTIVE"
+          retries: 60
+          delay: 10
+          register: cluster_runtime
+      when: (controller_ha == true)
+      tags: verify_cluster
 
     - name: Import CA SSL Certificates
       avi_sslkeyandcertificate:
@@ -238,7 +303,7 @@
           until: 
             - _fips_mode.failed == false
             - _fips_mode.failed is defined
-          retries: 10
+          retries: 30
           delay: 60
           tags: fips_debug
 

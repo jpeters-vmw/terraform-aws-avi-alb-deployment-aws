@@ -96,20 +96,6 @@
         avi_credentials: "{{ avi_credentials }}"
         name: cluster-0-1
       register: _fips_upgrade_status
-      when: fips.enabled
-      ignore_errors: true
-      tags: fips_debug
-
-    - name: Show _fips_upgrade_status
-      debug:
-        var: _fips_upgrade_status.obj.state.state
-      tags: fips_debug
-  
-    - name: Wait for FIPS Upgrade to complete
-      avi_upgradestatusinfo:
-        avi_credentials: "{{ avi_credentials }}"
-        name: cluster-0-1
-      register: _fips_upgrade_status
       until: _fips_upgrade_status.obj.state.state == "UPGRADE_FSM_COMPLETED"
       retries: 300
       delay: 10
@@ -522,42 +508,6 @@
         - configure_gslb_additional_sites
         - gslb
       ignore_errors: yes
-
-    - name: Controller Cluster Configuration
-      avi_cluster:
-        avi_credentials: "{{ avi_credentials }}"
-        state: present
-        #virtual_ip:
-        #  type: V4
-        #  addr: "{{ controller_cluster_vip }}"
-        nodes:
-            - name:  "{{ controller_names[0] }}" 
-              password: "{{ password }}"
-              ip:
-                type: V4
-                addr: "{{ controller_ip[0] }}"
-            - name:  "{{ controller_names[1] }}" 
-              password: "{{ password }}"
-              ip:
-                type: V4
-                addr: "{{ controller_ip[1] }}"
-            - name:  "{{ controller_names[2] }}" 
-              password: "{{ password }}"
-              ip:
-                type: V4
-                addr: "{{ controller_ip[2] }}"
-%{ if configure_gslb.enabled ~}
-        name: "{{ name_prefix }}-{{ configure_gslb.site_name }}-cluster"
-%{ else ~}
-        name: "{{ name_prefix }}-cluster"
-%{ endif ~}
-        tenant_uuid: "admin"
-      until: cluster_config is not failed
-      retries: 10
-      delay: 5
-      register: cluster_config
-      when: controller_ha == true
-      tags: controller_ha
 
     - name: Add Prerequisites for avi-cloud-services-registration.yml Play
       block:
