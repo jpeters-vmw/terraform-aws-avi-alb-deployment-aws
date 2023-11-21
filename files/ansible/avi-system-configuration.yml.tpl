@@ -308,8 +308,8 @@
           delay: 60
           tags: fips_debug
 
-        - name: Wait for 10 minutes before continuing
+        - name: Wait for 20 minutes before continuing
           wait_for:
-            timeout: 600
+            timeout: 1200
           tags: fips_debug
       when: fips.enabled
