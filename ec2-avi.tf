@@ -174,7 +174,7 @@ resource "null_resource" "system_configuration" {
   }
 
   provisioner "remote-exec" {
-    on_failure = "continue"
+    on_failure = continue
     inline = var.configure_controller ? var.create_iam ? [
       "sleep 30",
       "export ANSIBLE_COLLECTIONS_PATHS=/etc/ansible/collections:/home/admin/.ansible/collections:/usr/share/ansible/collections",

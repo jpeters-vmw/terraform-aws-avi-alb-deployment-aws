@@ -258,7 +258,7 @@
             dest: /home/admin/.aws/config
             group: admin
             owner: admin
-        
+
         - name: Download controller.pkg from {{ fips.s3_bucket }}
           command: aws s3 cp s3://{{ fips.s3_bucket }}{{ fips.s3_controller_package }} /tmp/fips-controller.pkg
 
@@ -299,6 +299,7 @@
             path: systemconfiguration/compliancemode
             data:
               fips_mode: true
+              force: true
           register: _fips_mode
           until: 
             - _fips_mode.failed == false
